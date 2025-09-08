@@ -4,8 +4,8 @@ const { UserRole, TicketStatus } = require('../enum');
 
 module.exports = {
   maybeAutoAssign: async (ticket) => {
-    // find agents that handle this category
-    let candidates = await User.find({ role: UserRole.Agent.key, categories: ticket.category });
+    // find agents that handle this department
+    let candidates = await User.find({ role: UserRole.Agent.key, categories: ticket.department });
 
     if (!candidates.length) {
       // fallback: all agents

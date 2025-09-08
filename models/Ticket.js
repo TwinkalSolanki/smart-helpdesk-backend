@@ -8,7 +8,7 @@ const ticketSchema = new mongoose.Schema({
         required: true  
     },
     description: String,
-    category: String,
+    department: String,
     priority: {
         type: String,
         enum: Priority.enums.map(e => e.key),
@@ -31,7 +31,11 @@ const ticketSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
-    resolutionNotes: String
+    resolutionNotes: String,
+    resolvedAt: {
+        type: Date,
+        default: null
+    },
 }, { timestamps: true });
 
 

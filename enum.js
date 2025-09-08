@@ -18,4 +18,11 @@ const UserRole = new Enum({
     User: 3
 });
 
-module.exports = { TicketStatus, Priority, UserRole };
+const NotificationType = new Enum({
+    Info: 1,
+    Success: 2,
+    Warning: 3,
+    Error: 4
+});
+
+module.exports = { TicketStatus, Priority, UserRole, NotificationType };

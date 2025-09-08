@@ -12,10 +12,12 @@ async function notifyTicketAssigned(ticket, agent) {
     <p>Regards,<br/>Smart Helpdesk Team</p>
   `;
 
-  await sendEmail(ticket.createdBy.email, subject, html);
+  // await sendEmail(ticket.createdBy.email, subject, html);
+  await sendEmail(agent.email, subject, html);
 
   const message = `Ticket ${ticket.title} ("#${ticket.ticketNumber}") has been assigned to ${agent.name}.`;
-  await sendSMS(ticket.createdBy.phone, message);
+  // await sendSMS(ticket.createdBy.phone, message);
+  await sendSMS(agent.phone, message);
 }
 
 async function notifyTicketResolved(ticket) {

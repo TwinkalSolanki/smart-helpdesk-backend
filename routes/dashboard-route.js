@@ -1,11 +1,8 @@
 const dashboardController = require('../controllers/dashboardController');
-const {protectAndAuthorize} = require('../middlewares/authMiddleware');
-const { UserRole } = require('../enum');
+const { authenticateUser } = require('../middlewares/authMiddleware');
 
 module.exports = (app) => {
-    app.get('/getDashboardStats', protectAndAuthorize(UserRole.User.key), dashboardController.getDashboardStats);
-    app.get('/getRecentTickets', protectAndAuthorize(UserRole.User.key), dashboardController.getRecentTickets);
-    app.get('/getTicketsByStatus', protectAndAuthorize(), dashboardController.getTicketsByStatus);
-    app.get('/getTicketsByPriority', protectAndAuthorize(), dashboardController.getTicketsByPriority);
-    app.get('/getTicketTrends', protectAndAuthorize(), dashboardController.getTicketTrends);
+    app.get('/getDashboardStats', authenticateUser, dashboardController.getDashboardStats);
+    app.get('/getRecentTickets', authenticateUser, dashboardController.getRecentTickets);
+    app.get('/getTicketChartData', authenticateUser, dashboardController.getTicketChartData);
 };

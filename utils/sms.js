@@ -1,6 +1,6 @@
 const twilio = require("twilio");
 
-const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH);
+const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
 exports.sendSMS = async (to, message) => {
   try {

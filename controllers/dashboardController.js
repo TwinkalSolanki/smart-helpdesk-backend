@@ -4,22 +4,33 @@ const { success, error } = require('../constant');
 
 exports.getDashboardStats = async (req, res) => {
     try {
-        const totalTickets = await Ticket.countDocuments();
-        const openTickets = await Ticket.countDocuments({ status: 'Open' });
-        const inProgressTickets = await Ticket.countDocuments({ status: 'InProgress' });
-        const resolvedTickets = await Ticket.countDocuments({ status: 'Resolved' });
+        const userId = req.user._id;
+
+        const totalTickets = await Ticket.countDocuments({ createdBy: userId });
+        const openTickets = await Ticket.countDocuments({ createdBy: userId, status: 'Open' });
+        const inProgressTickets = await Ticket.countDocuments({ createdBy: userId, status: 'InProgress' });
+        const resolvedTickets = await Ticket.countDocuments({ createdBy: userId, status: 'Resolved' });
         
         const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
-        const ticketsThisMonth = await Ticket.countDocuments({ createdAt: { $gte: startOfMonth, $lte: endOfMonth } });
+        const ticketsThisMonth = await Ticket.countDocuments({ createdBy: userId, createdAt: { $gte: startOfMonth, $lte: endOfMonth } });
+
+        const avgResolution = await Ticket.aggregate([
+            { $match: { createdBy: userId, status: 'Resolved', resolvedAt: { $exists: true}}},
+            { $project: { resolutionTIme: { $subtract: ['$resolvedAt', '$createdAt'] } } },
+            { $group: { _id: null, avgResolutionTimeMs: { $avg: '$resolutionTIme' } } },
+        ]);
+
+        const avgResolutionTime = avgResolution.length > 0 ? (avgResolution[0].avgResolutionTimeMs / (1000 * 60 * 60)).toFixed(2) : null; // in hours
+
 
         const stats = {
             totalTickets,
             openTickets,
             inProgressTickets,
             resolvedTickets,
-            avgResolutionTime: 24, // Mock data
-            userSatisfactionScore: 4.2, // Mock data
+            avgResolutionTime,
+            userSatisfactionScore: 0,   // do it later when feedback module is done
             ticketsThisMonth
         };
 
@@ -32,8 +43,14 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getRecentTickets = async (req, res) => {
     try {
+        const userId = req.user._id;
         const limit = parseInt(req.query.limit) || 10;
-        const tickets = await Ticket.find()
+        const tickets = await Ticket.find({
+            $or: [
+                { createdBy: userId },
+                { assignee: userId }
+            ]
+        })
             .populate('createdBy', 'name email')
             .populate('assignee', 'name email')
             .sort({ createdAt: -1 })
@@ -46,79 +63,76 @@ exports.getRecentTickets = async (req, res) => {
     }
 };
 
-exports.getTicketsByStatus = async (req, res) => {
+exports.getTicketChartData = async (req, res) => {
     try {
-        const statusCounts = await Ticket.aggregate([
-            { $group: { _id: '$status', count: { $sum: 1 } } }
-        ]);
+        const userId = req.user._id;
+        
+        const period = req.query.period || '7d';
+        const days = parseInt(period.replace('d', ''), 10) || 7;
 
-        const data = {
-            labels: statusCounts.map(item => item._id),
-            datasets: [{
-                label: 'Tickets by Status',
-                data: statusCounts.map(item => item.count),
-                backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0']
-            }]
-        };
-
-        res.json({ success: true, data });
-    } catch (err) {
-        console.error('Error fetching tickets by status:', err);
-        res.status(500).json({ success: false, message: err.message || error.SERVER_ERROR });
-    }
-};
-
-exports.getTicketsByPriority = async (req, res) => {
-    try {
-        const priorityCounts = await Ticket.aggregate([
-            { $group: { _id: '$priority', count: { $sum: 1 } } }
-        ]);
-
-        const data = {
-            labels: priorityCounts.map(item => item._id),
-            datasets: [{
-                label: 'Tickets by Priority',
-                data: priorityCounts.map(item => item.count),
-                backgroundColor: ['#ff4757', '#ffa726', '#66bb6a']
-            }]
-        };
-
-        res.json({ success: true, data });
-    } catch (err) {
-        console.error('Error fetching tickets by priority:', err);
-        res.status(500).json({ success: false, message: err.message || error.SERVER_ERROR });
-    }
-};
-
-exports.getTicketTrends = async (req, res) => {
-    try {
-        const days = parseInt(req.query.days) || 30;
+        const now = new Date();
         const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
+        startDate.setDate(now.getDate() - days);
 
-        const trends = await Ticket.aggregate([
-            { $match: { createdAt: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                    count: { $sum: 1 }
-                }
+        // Initialize labels for each day
+        const labels = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(now.getDate() - i);
+            labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}));
+        }
+
+        const createdData = await Ticket.aggregate([
+            { $match: { 
+                  createdAt: { $gte: startDate },
+                  $or: [{ createdBy: userId }, { assignee: userId }]
+              }
             },
-            { $sort: { _id: 1 } }
+            { 
+              $group: { 
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }},
+                count: { $sum: 1 }
+              }
+            }
         ]);
 
-        const data = {
-            labels: trends.map(item => item._id),
-            datasets: [{
-                label: 'Tickets Created',
-                data: trends.map(item => item.count),
-                backgroundColor: '#36a2eb'
-            }]
-        };
+        const resolvedData = await Ticket.aggregate([
+            { $match: { 
+                  resolvedAt: { $gte: startDate },
+                  $or: [{ createdBy: userId }, { assignee: userId }]
+              }
+            },
+            {
+              $group: {
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$resolvedAt' } },
+                count: { $sum: 1 }
+              }
+            }
+        ]);
 
-        res.json({ success: true, data });
+        const createdMap = Object.fromEntries(createdData.map(d => [d._id, d.count]));
+        const resolvedMap = Object.fromEntries(resolvedData.map(d => [d._id, d.count]));
+
+        const createdCounts = [];
+        const resolvedCounts = [];
+
+        for( let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(now.getDate() - i);
+            const key = date.toISOString().split('T')[0];    //YYYY-MM-DD
+            createdCounts.push(createdMap[key] || 0);
+            resolvedCounts.push(resolvedMap[key] || 0);
+        }
+
+        res.json({
+            labels,
+            datasets: [
+                { labels: 'Created', data: createdCounts },
+                { labels: 'Resolved', data: resolvedCounts }
+            ]
+        });
     } catch (err) {
-        console.error('Error fetching ticket trends:', err);
-        res.status(500).json({ success: false, message: err.message || error.SERVER_ERROR });
+        console.log('Error Fetching ticket chart data:', err)
+        res.status()(500).json({ success: false, message: err.message || error.SERVER_ERROR });
     }
-};
+}

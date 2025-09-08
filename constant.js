@@ -3,15 +3,23 @@ module.exports = {
     TICKET_CREATED: "Ticket Created Successfully",
     TICKET_UPDATED: "Ticket Updated Successfully",
     TICKET_ASSIGNED: "Ticket Assigned Successfully",
+
     LOGIN_SUCCESS: "Login successful",
     USER_REGISTERED: "User registered successfully",
-    USER_DELETED: "User deleted successfully"
+    USER_DELETED: "User deleted successfully",
+
+    DEPARTMENT_CREATED: "Department Created Successfully",
+
   },
   error: {
     TICKET_NOT_FOUND: "Ticket Not Found",
     USER_NOT_FOUND: "User not found",
     INVALID_CREDENTIALS: "Invalid credentials",
     SERVER_ERROR: "Internal server error",
-    USER_EXISTS: "User already exists"
+    USER_EXISTS: "User already exists",
+
+    DEPARTMENT_NAME_REQUIRED: "Department name is required",
+    DEPARTMENT_ALREADY_EXISTS: "Department already exists",
+    
   }
 };

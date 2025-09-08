@@ -3,35 +3,8 @@ const User = require('../models/User');
 const { success, error } = require('../constant');
 const autoAssignTicket = require('../utils/autoAssignTicket');
 const { notifyTicketAssigned, notifyTicketResolved } = require('../utils/notify');
-
-// exports.createTicket = async (req, res) => {
-//     try{
-//         const TicketData = {
-//             title: req.body.title,
-//             description: req.body.description,
-//             priority: req.body.priority,
-//             category: req.body.category,
-//             createdBy: req.user.id,
-//             // assignee : req.user.id
-//         }
-//         // const data = { TicketData, createdBy: req.user._id };
-//         const ticket = await Ticket.create(TicketData);
-
-//          // Auto-assign based on priority and category
-//         const agent = await autoAssignTicket.maybeAutoAssign(ticket);
-
-//         if (agent) {
-//             await notifyTicketAssigned(ticket, agent); //  notify after assigning
-//         }
-
-//         req.app.get('io').emit('ticketCreated', ticket); // WebSocket event
-
-//         res.status(201).json({ success: true, message: success.TICKET_CREATED, data: ticket });
-//     } catch(err) {
-//         console.error('Error creating ticket:', err);
-//         res.status(500).json({ success: false, message: err.message || error.SERVER_ERROR});
-//     }
-// }
+const notificationConstants = require("../utils/notificationConstants.js");
+const { createNotification } = require("../utils/common-function");
 
 exports.createTicket = async (req, res) => {
     try {
@@ -39,20 +12,24 @@ exports.createTicket = async (req, res) => {
             title: req.body.title,
             description: req.body.description,
             priority: req.body.priority,
-            category: req.body.category,
+            department: req.body.department,
             createdBy: req.user.id,
         };
         const ticket = await Ticket.create(TicketData);
 
-        // Auto-assign based on priority and category
+        // Auto-assign based on priority and department
         const agent = await autoAssignTicket.maybeAutoAssign(ticket);
 
         // Populate assignee's name before sending response
         const populatedTicket = await Ticket.findById(ticket._id)
-            .populate('assignee', 'name')
-            .populate('createdBy', 'name email phone');
+            .populate('assignee', 'name email phone')
+            .populate('createdBy', 'name email phone role');
 
         if (agent) {
+            await createNotification(agent._id, agent.role, notificationConstants.TicketAssigned(populatedTicket));
+            console.log(agent._id, 'agent id');
+            await createNotification(populatedTicket.createdBy._id, populatedTicket.createdBy.role, notificationConstants.TicketCreated(populatedTicket));
+            console.log(populatedTicket.createdBy._id, 'created by id');
             await notifyTicketAssigned(populatedTicket, agent);
         }
 
@@ -88,7 +65,12 @@ exports.assignTicket = async (req, res) => {
         ticket.assignee = req.body.assignee;
         await ticket.save();
 
-         const resData = await Ticket.findById(ticket._id).populate('assignee', 'name').populate('createdBy', 'name email phone');
+        const resData = await Ticket.findById(ticket._id).populate('assignee', 'name').populate('createdBy', 'name email phone');
+
+        await createNotification(ticket.assignee._id, ticket.assignee.role, notificationConstants.TicketAssigned(resData));
+        await createNotification(resData.createdBy._id, resData.createdBy.role, notificationConstants.TicketCreated(resData));
+        await notifyTicketAssigned(resData, resData.assignee);
+
         req.app.get('io').emit('ticketAssigned', resData);
 
         res.json({ success: true, message: success.TICKET_ASSIGNED, data: resData });
@@ -119,10 +101,15 @@ exports.updateStatus = async (req, res) => {
         }
         ticket.status = req.body.status;
         ticket.resolutionNotes = req.body.resolutionNotes || ticket.resolutionNotes;
+
+        if(req.body.status === "Resolved" && !ticket.resolvedAt) {
+            ticket.resolvedAt = new Date();
+        }
         await ticket.save();
 
         // If ticket is resolved, notify createdBy
         if (ticket.status === "Resolved") {
+          await createNotification(ticket.createdBy._id, ticket.createdBy.role, notificationConstants.TicketResolved(ticket));
           await notifyTicketResolved(ticket);
         }
 
@@ -134,7 +121,7 @@ exports.updateStatus = async (req, res) => {
         res.status(500).json({ success: false, message: err.message || error.SERVER_ERROR });
     }
 }
-
+ 
 exports.getMyTickets = async (req, res) => {
     try {
         const userId = req.user.id;

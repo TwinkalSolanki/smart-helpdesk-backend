@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 exports.sendEmail = async (to, subject, html) => {
     try {
         await transporter.sendMail({
-            from: `"Helpdesk" <${process.env.EMAIL_USER}>`,
+            from: `"Helpdesk" <${process.env.SMTP_EMAIL_USER}>`,
             to,
             subject,
             html
